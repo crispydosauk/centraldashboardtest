@@ -64,7 +64,7 @@ export default function Sidebar({ open, onClose }) {
   const menu = useMemo(() => [
     { label: "Dashboard", to: "/dashboard", icon: iconUsers() },
     { label: "Manual Order Assign", to: "/manual-orders", icon: iconAssign() },
-    { label: "Manage Orders", to: "/orders", icon: iconCart() },
+
     { label: "Help", to: "/help", icon: iconHelp() },
     
   ], []);

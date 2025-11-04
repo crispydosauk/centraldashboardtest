@@ -14,12 +14,20 @@ export default function Roles() {
   // Permissions (from API)
   const [permLoading, setPermLoading] = useState(true);
   const [permError, setPermError] = useState("");
-  const [permissions, setPermissions] = useState([]); 
+  const [permissions, setPermissions] = useState([]);
 
   // Selected permissions
-  const [selectedIds, setSelectedIds] = useState([]); 
+  const [selectedIds, setSelectedIds] = useState([]);
 
+  // Roles list (NEW)
+  const [rolesLoading, setRolesLoading] = useState(true);
+  const [rolesError, setRolesError] = useState("");
+  const [roles, setRoles] = useState([]);
 
+  // pagination placeholders (static UI)
+  const pageSize = 10;
+
+  // ---------- Load permissions ----------
   useEffect(() => {
     (async () => {
       try {
@@ -34,6 +42,25 @@ export default function Roles() {
         setPermLoading(false);
       }
     })();
+  }, []);
+
+  // ---------- Load roles (NEW) ----------
+  const fetchRoles = async () => {
+    try {
+      setRolesLoading(true);
+      const res = await api.get("/roles");
+      const list = Array.isArray(res?.data?.data) ? res.data.data : [];
+      setRoles(list);
+      setRolesError("");
+    } catch (e) {
+      setRolesError(e?.message || "Failed to load roles");
+    } finally {
+      setRolesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRoles();
   }, []);
 
   // Helpers for multi-select
@@ -54,20 +81,35 @@ export default function Roles() {
     if (!canSubmit) return;
     try {
       setSubmitting(true);
-      // Prepare payload
-      const payload = {
+      // Ensure IDs are numbers
+      const permission_ids = selectedIds.map(Number).filter(Boolean);
+
+      const res = await api.post("/roles", {
         title: roleTitle.trim(),
-        permission_ids: selectedIds,
-      };
-      
-      console.log("Create Role payload:", payload);
-      // Reset & close
+        permission_ids,
+      });
+
+      // Option A: re-fetch list to ensure server truth
+      await fetchRoles();
+
+      // reset + close
       setRoleTitle("");
       setSelectedIds([]);
       setOpenCreate(false);
+    } catch (e) {
+      alert(e?.response?.data?.message || "Failed to create role");
     } finally {
       setSubmitting(false);
     }
+  };
+
+  // Render helpers
+  const renderPermissionsInline = (permArr = []) => {
+    if (!permArr.length) return <span className="text-gray-500">—</span>;
+    const names = permArr.map((p) => p.title);
+    const max = 3;
+    if (names.length <= max) return names.join(", ");
+    return `${names.slice(0, max).join(", ")} +${names.length - max} more`;
   };
 
   return (
@@ -140,21 +182,60 @@ export default function Roles() {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr>
-                    <td
-                      colSpan={4}
-                      className="px-4 py-8 text-center text-sm text-gray-600"
-                    >
-                      No records found
-                    </td>
-                  </tr>
+                  {rolesLoading ? (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-8 text-center text-sm text-gray-600">
+                        Loading roles…
+                      </td>
+                    </tr>
+                  ) : rolesError ? (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-8 text-center text-sm text-red-600">
+                        {rolesError}
+                      </td>
+                    </tr>
+                  ) : roles.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-8 text-center text-sm text-gray-600">
+                        No records found
+                      </td>
+                    </tr>
+                  ) : (
+                    roles.slice(0, pageSize).map((r, idx) => (
+                      <tr key={r.id} className="border-t">
+                        <td className="px-4 py-2 text-sm text-gray-700">{idx + 1}</td>
+                        <td className="px-4 py-2 text-sm text-gray-900">{r.title}</td>
+                        <td className="px-4 py-2 text-sm text-gray-700">
+                          {renderPermissionsInline(r.permissions)}
+                        </td>
+                        <td className="px-4 py-2 text-sm">
+                          <div className="inline-flex gap-2">
+                            <button
+                              className="px-3 py-1 rounded border hover:bg-gray-50"
+                              onClick={() => alert("Edit coming soon")}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              className="px-3 py-1 rounded border hover:bg-gray-50"
+                              onClick={() => alert("Delete coming soon")}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
 
             {/* Footer / Pagination */}
             <div className="px-4 py-3 flex items-center justify-between text-sm text-gray-600">
-              <span>Showing 0 to 0 of 0 entries</span>
+              <span>
+                Showing {roles.length ? 1 : 0} to {Math.min(pageSize, roles.length)} of {roles.length} entries
+              </span>
               <div className="inline-flex items-center gap-1">
                 <button className="px-2.5 py-1.5 rounded border text-gray-400 cursor-not-allowed" disabled>
                   «
@@ -266,7 +347,7 @@ export default function Roles() {
                   disabled={!canSubmit || submitting}
                   className="rounded-md bg-green-700 px-4 py-2 text-sm font-medium text-white hover:bg-green-700/90 disabled:opacity-60"
                 >
-                  {submitting ? "Saving..." : "Add Role"}
+                  {submitting ? "Saving..." : "Add"}
                 </button>
               </div>
             </div>
@@ -276,7 +357,6 @@ export default function Roles() {
     </div>
   );
 }
-
 
 function MultiSelectDropdown({ loading, options, selected, onToggle }) {
   const [open, setOpen] = useState(false);
@@ -295,7 +375,6 @@ function MultiSelectDropdown({ loading, options, selected, onToggle }) {
     if (loading) return "Loading permissions…";
     if (!options?.length) return "No permissions available";
     if (!selected?.length) return "Select permissions";
-    // Show up to 3 names then "+N more"
     const picked = options
       .filter((o) => selected.includes(o.id))
       .map((o) => o.title);
@@ -322,9 +401,7 @@ function MultiSelectDropdown({ loading, options, selected, onToggle }) {
           {loading ? (
             <div className="px-3 py-2 text-sm text-gray-600">Loading…</div>
           ) : !options?.length ? (
-            <div className="px-3 py-2 text-sm text-gray-600">
-              No permissions found
-            </div>
+            <div className="px-3 py-2 text-sm text-gray-600">No permissions found</div>
           ) : (
             <ul role="listbox" className="py-1">
               {options.map((opt) => {

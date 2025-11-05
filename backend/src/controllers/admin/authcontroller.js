@@ -4,34 +4,41 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 
 export const login = async (req, res) => {
-  const { email, password } = req.body || {};
+  let { email, password } = req.body || {};
   if (!email || !password) {
     return res.status(400).json({ message: "Email and password are required" });
   }
 
+  email = String(email).trim().toLowerCase();
+  password = String(password);
+
   try {
-    // 1) find user
     const [rows] = await db.execute(
       `SELECT id, role_id, name, email, password
          FROM users
-        WHERE email=? AND deleted_at IS NULL
+        WHERE LOWER(email)=? AND deleted_at IS NULL
         LIMIT 1`,
-      [email.trim()]
+      [email]
     );
     if (!rows.length) return res.status(401).json({ message: "Invalid credentials" });
 
     const user = rows[0];
-    const ok = user.password ? await bcrypt.compare(password, user.password) : password === user.password;
+    const stored = user.password || "";
+
+    // ✅ only use bcrypt when the stored value is a bcrypt hash
+    const isBcrypt = /^\$2[aby]\$/.test(stored);
+    const ok = isBcrypt ? await bcrypt.compare(password, stored) : password === stored;
+
     if (!ok) return res.status(401).json({ message: "Invalid credentials" });
 
-    // 2) role meta
+    // role title
     let roleTitle = null;
     if (user.role_id) {
       const [r] = await db.execute(`SELECT title FROM roles WHERE id=? AND deleted_at IS NULL`, [user.role_id]);
       roleTitle = r.length ? r[0].title : null;
     }
 
-    // 3) permissions for the role
+    // permissions list (lowercased codes)
     let permissions = [];
     if (user.role_id) {
       const [perms] = await db.execute(
@@ -41,25 +48,20 @@ export const login = async (req, res) => {
           WHERE pr.role_id=?`,
         [user.role_id]
       );
-      permissions = perms.map((x) => x.code); // e.g. ["dashboard","order_management","help","access"]
+      permissions = perms.map(x => x.code);
     }
 
-    // 4) sign token
+    const expiresIn = req.body?.remember ? "30d" : "2d";
     const token = jwt.sign(
       { id: user.id, role_id: user.role_id, email: user.email },
       process.env.JWT_SECRET || "devsecret",
-      { expiresIn: "2d" }
+      { expiresIn }
     );
+
 
     return res.json({
       token,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role_id: user.role_id,
-        role_title: roleTitle,
-      },
+      user: { id: user.id, name: user.name, email: user.email, role_id: user.role_id, role_title: roleTitle },
       permissions,
     });
   } catch (e) {

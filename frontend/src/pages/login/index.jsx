@@ -13,23 +13,34 @@ export default function LoginPage() {
   const onChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setErr("");
-    if (!form.email || !form.password) return setErr("Email and password are required");
-    try {
-      setLoading(true);
-      const { data } = await api.post("/auth/login", form);
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("user", JSON.stringify(data.user));
-      localStorage.setItem("perms", JSON.stringify(data.permissions || []));
-      if (remember) localStorage.setItem("remember", "1");
-      navigate("/");
-    } catch (error) {
-      setErr(error?.response?.data?.message || "Login failed");
-    } finally {
-      setLoading(false);
-    }
-  };
+  e.preventDefault();
+  setErr("");
+
+  const email = (form.email || "").trim().toLowerCase();
+  const password = String(form.password || "");
+
+  if (!email || !password) return setErr("Email and password are required");
+  try {
+    setLoading(true);
+  // Clear any stale session before starting
+  localStorage.removeItem("token");
+  localStorage.removeItem("user");
+  localStorage.removeItem("perms");
+
+
+  const { data } = await api.post("/auth/login", { email, password, remember });
+
+    localStorage.setItem("token", data.token);
+    localStorage.setItem("user", JSON.stringify(data.user));
+    localStorage.setItem("perms", JSON.stringify(data.permissions || []));
+    if (remember) localStorage.setItem("remember", "1");
+    navigate("/");
+  } catch (error) {
+    setErr(error?.response?.data?.message || "Login failed");
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-tr from-green-200 via-emerald-300 to-teal-500 flex items-center justify-center px-3 py-4 md:py-8">

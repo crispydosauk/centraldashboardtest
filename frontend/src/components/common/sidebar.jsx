@@ -1,5 +1,7 @@
+// frontend/src/components/common/sidebar.jsx
 import React, { useEffect, useMemo, useCallback, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
+import { can } from "../../utils/perm";
 
 const Item = ({ to = "#", icon, label }) => (
   <NavLink
@@ -16,8 +18,9 @@ const Item = ({ to = "#", icon, label }) => (
   </NavLink>
 );
 
-function Group({ label, icon, children, defaultOpen = false }) {
+function Group({ label, icon, children, defaultOpen = false, hidden = false }) {
   const [open, setOpen] = useState(defaultOpen);
+  if (hidden) return null;
   return (
     <div className="space-y-1">
       <button
@@ -52,7 +55,7 @@ export default function Sidebar({ open, onClose }) {
   const location = useLocation();
 
   // Close sidebar on route change (mobile)
-  useEffect(() => { if (open) onClose?.(); }, [location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (open) onClose?.(); }, [location.pathname]); // eslint-disable-line
 
   // ESC to close (mobile)
   const escHandler = useCallback((e) => { if (e.key === "Escape" && open) onClose?.(); }, [open, onClose]);
@@ -61,13 +64,20 @@ export default function Sidebar({ open, onClose }) {
     return () => document.removeEventListener("keydown", escHandler);
   }, [escHandler]);
 
-  const menu = useMemo(() => [
-    { label: "Dashboard", to: "/dashboard", icon: iconUsers() },
-    { label: "Manual Order Assign", to: "/manual-orders", icon: iconAssign() },
+  // Define your menu with required permission codes
+  const rawMenu = useMemo(() => ([
+    { label: "Dashboard", to: "/dashboard", icon: iconUsers(), perm: "dashboard" },
+    { label: "Manual Order Assign", to: "/manual-orders", icon: iconAssign(), perm: "order_management" },
+    { label: "Help", to: "/help", icon: iconHelp(), perm: "help" },
+  ]), []);
 
-    { label: "Help", to: "/help", icon: iconHelp() },
-    
-  ], []);
+  const visibleMenu = rawMenu.filter(m => can(m.perm));
+
+  const accessChildren = useMemo(() => ([
+    { label: "Permissions", to: "/access", icon: iconLock(), perm: "access" },
+    { label: "Roles",       to: "/access/roles", icon: iconUsersCog(), perm: "access" },
+    { label: "Users",       to: "/access/users", icon: iconUser(), perm: "access" },
+  ].filter(x => can(x.perm))), []);
 
   const accessOpen = location.pathname.startsWith("/access");
 
@@ -101,16 +111,20 @@ export default function Sidebar({ open, onClose }) {
 
         {/* Menu */}
         <nav className="p-3 space-y-1 overflow-y-auto h-[calc(100%-5rem)]">
-          {menu.map((m) => (
+          {visibleMenu.map((m) => (
             <Item key={m.label} to={m.to} label={m.label} icon={m.icon} />
           ))}
 
-          {/* ===== Access (Dropdown) ===== */}
-          <Group label="Access" icon={iconShield()} defaultOpen={accessOpen}>
-            {/* Permissions goes to /access */}
-            <Item to="/access" label="Permissions" icon={iconLock()} />
-            <Item to="/access/roles" label="Roles" icon={iconUsersCog()} />
-            <Item to="/access/users" label="Users" icon={iconUser()} />
+          {/* Access group only if it has visible children */}
+          <Group
+            label="Access"
+            icon={iconShield()}
+            defaultOpen={accessOpen}
+            hidden={accessChildren.length === 0}
+          >
+            {accessChildren.map((m) => (
+              <Item key={m.label} to={m.to} label={m.label} icon={m.icon} />
+            ))}
           </Group>
         </nav>
       </aside>
@@ -118,12 +132,10 @@ export default function Sidebar({ open, onClose }) {
   );
 }
 
-/* ===== Icons ===== */
+/* ===== Icons (unchanged) ===== */
 function iconUsers(){return(<svg viewBox="0 0 24 24" fill="none"><path d="M16 11a4 4 0 1 0-8 0m-5 8a7 7 0 0 1 14 0M6 21h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>)}
 function iconAssign(){return(<svg viewBox="0 0 24 24" fill="none"><path d="M4 4h10v6H4zM4 14h16v6H4zM16 4h4v6h-4z" stroke="currentColor" strokeWidth="2"/></svg>)}
 function iconHelp(){return(<svg viewBox="0 0 24 24" fill="none"><path d="M12 18h.01M9 9a3 3 0 1 1 6 0c0 2-3 2-3 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>)}
-function iconCart(){return(<svg viewBox="0 0 24 24" fill="none"><path d="M6 6h15l-2 8H7L6 6zM6 6 4 4M7 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm10 0a1 1 0 1 0 .001-2A1 1 0 0 0 17 20z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>)}
-function iconCalendar(){return(<svg viewBox="0 0 24 24" fill="none"><path d="M7 3v4m10-4v4M4 9h16M5 21h14a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1z" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>)}
 function iconShield(){return(<svg viewBox="0 0 24 24" fill="none"><path d="M12 3l7 3v6c0 5-3.5 8-7 9-3.5-1-7-4-7-9V6l7-3z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>)}
 function iconLock(){return(<svg viewBox="0 0 24 24" fill="none"><path d="M7 10V7a5 5 0 0 1 10 0v3M6 10h12v9a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-9z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>)}
 function iconUsersCog(){return(<svg viewBox="0 0 24 24" fill="none"><path d="M12 14a5 5 0 0 0-9 3v3M21 20v-1a4 4 0 0 0-6.5-3.1M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/><path d="M18.5 7.5l1 .6-1 1.7h-2l-1-1.7 1-.6V6h2v1.5z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>)}

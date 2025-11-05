@@ -4,7 +4,7 @@ import Dashboard from "./components/dashboard/dashboard.jsx";
 import AccessManagement from "./pages/access/index.jsx";
 import Roles from "./pages/roles/index.jsx"; 
 import Users from "./pages/users/index.jsx";
-
+import RequirePerm from "./components/RequirePerm.jsx";
 
 function PrivateRoute({ children }) {
   const token = localStorage.getItem("token");
@@ -23,7 +23,8 @@ export default function App() {
           path="/dashboard"
           element={
             <PrivateRoute>
-              <Dashboard />
+            
+              <RequirePerm perm="dashboard"><Dashboard /></RequirePerm>
             </PrivateRoute>
           }
         />
@@ -32,7 +33,8 @@ export default function App() {
           path="/access"
           element={
             <PrivateRoute>
-              <AccessManagement />
+            
+              <RequirePerm perm="access"><AccessManagement /></RequirePerm>
             </PrivateRoute>
           }
         />
@@ -41,7 +43,8 @@ export default function App() {
           path="/access/roles"
           element={
             <PrivateRoute>
-              <Roles />
+              
+              <RequirePerm perm="access"><Roles /></RequirePerm>
             </PrivateRoute>
           }
         />
@@ -50,7 +53,8 @@ export default function App() {
           path="/access/users"
           element={
             <PrivateRoute>
-              <Users />
+             
+               <RequirePerm perm="access"><Users /></RequirePerm>
             </PrivateRoute>
           }
         />

@@ -21,6 +21,7 @@ export default function LoginPage() {
       const { data } = await api.post("/auth/login", form);
       localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data.user));
+      localStorage.setItem("perms", JSON.stringify(data.permissions || []));
       if (remember) localStorage.setItem("remember", "1");
       navigate("/");
     } catch (error) {

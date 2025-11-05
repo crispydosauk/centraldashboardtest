@@ -12,7 +12,14 @@ import {
   create as createRole,
   update as updateRole,
   remove as deleteRole,
-} from "../controllers/admin/rolescontroller.js";
+} from "../controllers/admin/rolesController.js";
+
+import {
+  index as listUsers,
+  create as createUser,
+  update as updateUser,
+  remove as deleteUser,
+} from "../controllers/admin/userscontroller.js"; 
 
 const router = express.Router();
 
@@ -30,5 +37,11 @@ router.get("/roles", listRoles);
 router.post("/roles", createRole);
 router.put("/roles/:id", updateRole);
 router.delete("/roles/:id", deleteRole);
+
+/* ---------- USERS ---------- */
+router.get("/users", listUsers);            // list users + role name
+router.post("/users", createUser);          // create user
+router.put("/users/:id", updateUser);       // update user
+router.delete("/users/:id", deleteUser);
 
 export default router;

@@ -7,22 +7,31 @@ import api from "../../api.js";
 export default function Roles() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Modal state
+  // Create modal
   const [openCreate, setOpenCreate] = useState(false);
   const [roleTitle, setRoleTitle] = useState("");
 
-  // Permissions (from API)
+  // Edit modal (NEW)
+  const [openEdit, setOpenEdit] = useState(false);
+  const [editRole, setEditRole] = useState(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editSelectedIds, setEditSelectedIds] = useState([]);
+
+  // Permissions
   const [permLoading, setPermLoading] = useState(true);
   const [permError, setPermError] = useState("");
   const [permissions, setPermissions] = useState([]);
 
-  // Selected permissions
+  // Selected permissions for CREATE
   const [selectedIds, setSelectedIds] = useState([]);
 
-  // Roles list (NEW)
+  // Roles list
   const [rolesLoading, setRolesLoading] = useState(true);
   const [rolesError, setRolesError] = useState("");
   const [roles, setRoles] = useState([]);
+
+  // Search (NEW)
+  const [searchTerm, setSearchTerm] = useState("");
 
   // pagination placeholders (static UI)
   const pageSize = 10;
@@ -44,7 +53,7 @@ export default function Roles() {
     })();
   }, []);
 
-  // ---------- Load roles (NEW) ----------
+  // ---------- Load roles ----------
   const fetchRoles = async () => {
     try {
       setRolesLoading(true);
@@ -63,10 +72,8 @@ export default function Roles() {
     fetchRoles();
   }, []);
 
-  // Helpers for multi-select
+  // Helpers for multi-select (CREATE)
   const allIds = useMemo(() => permissions.map((p) => p.id), [permissions]);
-  const allSelected = selectedIds.length && selectedIds.length === allIds.length;
-
   const handleSelectAll = () => setSelectedIds(allIds);
   const handleDeselectAll = () => setSelectedIds([]);
   const toggleOne = (id) =>
@@ -74,6 +81,16 @@ export default function Roles() {
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
 
+  // Helpers for multi-select (EDIT)
+  const editAllIds = useMemo(() => permissions.map((p) => p.id), [permissions]);
+  const editHandleSelectAll = () => setEditSelectedIds(editAllIds);
+  const editHandleDeselectAll = () => setEditSelectedIds([]);
+  const editToggleOne = (id) =>
+    setEditSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+
+  // Create submit
   const [submitting, setSubmitting] = useState(false);
   const canSubmit = roleTitle.trim().length > 0;
 
@@ -81,17 +98,12 @@ export default function Roles() {
     if (!canSubmit) return;
     try {
       setSubmitting(true);
-      // Ensure IDs are numbers
       const permission_ids = selectedIds.map(Number).filter(Boolean);
-
-      const res = await api.post("/roles", {
+      await api.post("/roles", {
         title: roleTitle.trim(),
         permission_ids,
       });
-
-      // Option A: re-fetch list to ensure server truth
       await fetchRoles();
-
       // reset + close
       setRoleTitle("");
       setSelectedIds([]);
@@ -102,6 +114,71 @@ export default function Roles() {
       setSubmitting(false);
     }
   };
+
+  // Edit: open modal with preload
+  const onEdit = (role) => {
+    setEditRole(role);
+    setEditTitle(role?.title || "");
+    const pre = (role?.permissions || []).map((p) => p.id);
+    setEditSelectedIds(pre);
+    setOpenEdit(true);
+  };
+
+  // Edit submit
+  const [updating, setUpdating] = useState(false);
+  const canUpdate = editRole && editTitle.trim().length > 0;
+
+  const handleUpdate = async () => {
+    if (!canUpdate) return;
+    try {
+      setUpdating(true);
+      const permission_ids = editSelectedIds.map(Number).filter(Boolean);
+      await api.put(`/roles/${editRole.id}`, {
+        title: editTitle.trim(),
+        permission_ids,
+      });
+      await fetchRoles();
+      // close
+      setOpenEdit(false);
+      setEditRole(null);
+      setEditTitle("");
+      setEditSelectedIds([]);
+    } catch (e) {
+      alert(e?.response?.data?.message || "Failed to update role");
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  // Delete
+  const [deletingId, setDeletingId] = useState(null);
+  const handleDelete = async (role) => {
+    if (!role?.id) return;
+    const ok = window.confirm(`Delete role "${role.title}"?`);
+    if (!ok) return;
+    try {
+      setDeletingId(role.id);
+      await api.delete(`/roles/${role.id}`);
+      await fetchRoles();
+    } catch (e) {
+      alert(e?.response?.data?.message || "Failed to delete role");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  // Search filter
+  const filteredRoles = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return roles;
+    return roles.filter((r) => {
+      const inTitle = String(r.title || "").toLowerCase().includes(q);
+      const inPerms = (r.permissions || []).some((p) =>
+        String(p.title || "").toLowerCase().includes(q)
+      );
+      return inTitle || inPerms;
+    });
+  }, [roles, searchTerm]);
 
   // Render helpers
   const renderPermissionsInline = (permArr = []) => {
@@ -134,7 +211,7 @@ export default function Roles() {
           </div>
 
           {/* Card */}
-          <div className="bg-white rounded-xl shadow-sm border">
+          <div className="bg-white rounded-xl shadow-sm">
             {/* Top controls */}
             <div className="px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div className="flex items-center gap-2 text-sm">
@@ -156,8 +233,9 @@ export default function Roles() {
                 <input
                   type="text"
                   className="border rounded-md px-2 py-1.5 w-56"
-                  placeholder="Search..."
-                  disabled
+                  placeholder="Search by role or permission…"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </label>
             </div>
@@ -194,14 +272,14 @@ export default function Roles() {
                         {rolesError}
                       </td>
                     </tr>
-                  ) : roles.length === 0 ? (
+                  ) : filteredRoles.length === 0 ? (
                     <tr>
                       <td colSpan={4} className="px-4 py-8 text-center text-sm text-gray-600">
                         No records found
                       </td>
                     </tr>
                   ) : (
-                    roles.slice(0, pageSize).map((r, idx) => (
+                    filteredRoles.slice(0, pageSize).map((r, idx) => (
                       <tr key={r.id} className="border-t">
                         <td className="px-4 py-2 text-sm text-gray-700">{idx + 1}</td>
                         <td className="px-4 py-2 text-sm text-gray-900">{r.title}</td>
@@ -211,16 +289,17 @@ export default function Roles() {
                         <td className="px-4 py-2 text-sm">
                           <div className="inline-flex gap-2">
                             <button
-                              className="px-3 py-1 rounded border hover:bg-gray-50"
-                              onClick={() => alert("Edit coming soon")}
+                              className="px-3 py-1 rounded border border-emerald-600 text-emerald-700 hover:bg-emerald-50"
+                              onClick={() => onEdit(r)}
                             >
                               Edit
                             </button>
                             <button
-                              className="px-3 py-1 rounded border hover:bg-gray-50"
-                              onClick={() => alert("Delete coming soon")}
+                              className="px-3 py-1 rounded border border-red-600 text-red-700 hover:bg-red-50"
+                              onClick={() => handleDelete(r)}
+                              disabled={deletingId === r.id}
                             >
-                              Delete
+                              {deletingId === r.id ? "Deleting…" : "Delete"}
                             </button>
                           </div>
                         </td>
@@ -234,7 +313,7 @@ export default function Roles() {
             {/* Footer / Pagination */}
             <div className="px-4 py-3 flex items-center justify-between text-sm text-gray-600">
               <span>
-                Showing {roles.length ? 1 : 0} to {Math.min(pageSize, roles.length)} of {roles.length} entries
+                Showing {filteredRoles.length ? 1 : 0} to {Math.min(pageSize, filteredRoles.length)} of {filteredRoles.length} entries
               </span>
               <div className="inline-flex items-center gap-1">
                 <button className="px-2.5 py-1.5 rounded border text-gray-400 cursor-not-allowed" disabled>
@@ -258,6 +337,7 @@ export default function Roles() {
         </footer>
       </div>
 
+      {/* CREATE MODAL */}
       {openCreate && (
         <>
           <div
@@ -344,10 +424,108 @@ export default function Roles() {
                 </button>
                 <button
                   onClick={handleSubmit}
-                  disabled={!canSubmit || submitting}
+                  disabled={!roleTitle.trim() || submitting}
                   className="rounded-md bg-green-700 px-4 py-2 text-sm font-medium text-white hover:bg-green-700/90 disabled:opacity-60"
                 >
                   {submitting ? "Saving..." : "Add"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* EDIT MODAL (NEW) */}
+      {openEdit && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/40 z-50"
+            onClick={() => setOpenEdit(false)}
+            aria-hidden="true"
+          />
+          <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 grid place-items-center p-4">
+            <div className="w-full max-w-2xl rounded-xl bg-white shadow-xl border">
+              {/* Header */}
+              <div className="px-5 py-4 border-b">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold text-gray-900">Edit Role</h2>
+                  <button
+                    onClick={() => setOpenEdit(false)}
+                    className="h-8 w-8 inline-flex items-center justify-center rounded-md hover:bg-gray-100"
+                    aria-label="Close"
+                  >
+                    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none">
+                      <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* Body */}
+              <div className="px-5 py-6 space-y-5">
+                {/* Title */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Title <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    className="w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="e.g., Admin"
+                  />
+                </div>
+
+                {/* Permissions */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Permissions
+                    </label>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={editHandleSelectAll}
+                        className="px-2 py-1 text-xs font-medium rounded bg-green-700 text-white hover:bg-green-700/90"
+                        disabled={permLoading || permissions.length === 0}
+                      >
+                        Select all
+                      </button>
+                      <button
+                        type="button"
+                        onClick={editHandleDeselectAll}
+                        className="px-2 py-1 text-xs font-medium rounded border border-gray-300 hover:bg-gray-50"
+                        disabled={permLoading || editSelectedIds.length === 0}
+                      >
+                        Deselect all
+                      </button>
+                    </div>
+                  </div>
+
+                  <MultiSelectDropdown
+                    loading={permLoading}
+                    options={permissions}
+                    selected={editSelectedIds}
+                    onToggle={editToggleOne}
+                  />
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="px-5 pb-5 flex justify-end gap-3">
+                <button
+                  onClick={() => setOpenEdit(false)}
+                  className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUpdate}
+                  disabled={!editTitle.trim() || updating}
+                  className="rounded-md bg-green-700 px-4 py-2 text-sm font-medium text-white hover:bg-green-700/90 disabled:opacity-60"
+                >
+                  {updating ? "Saving..." : "Update"}
                 </button>
               </div>
             </div>

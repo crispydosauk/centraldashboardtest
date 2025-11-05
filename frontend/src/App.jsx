@@ -3,6 +3,8 @@ import LoginPage from "./pages/login/index.jsx";
 import Dashboard from "./components/dashboard/dashboard.jsx";
 import AccessManagement from "./pages/access/index.jsx";
 import Roles from "./pages/roles/index.jsx"; 
+import Users from "./pages/users/index.jsx";
+
 
 function PrivateRoute({ children }) {
   const token = localStorage.getItem("token");
@@ -40,6 +42,15 @@ export default function App() {
           element={
             <PrivateRoute>
               <Roles />
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/access/users"
+          element={
+            <PrivateRoute>
+              <Users />
             </PrivateRoute>
           }
         />
